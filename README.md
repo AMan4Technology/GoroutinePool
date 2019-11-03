@@ -1,0 +1,2 @@
+# GoroutinePool
+Smart goroutine pool
