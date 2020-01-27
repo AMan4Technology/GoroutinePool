@@ -76,16 +76,18 @@ func (p *Pool) EnqueueWith(mission Mission, timeout time.Duration, strategy Stra
             return fmt.Errorf("reject mission{%s}", mission.id)
         }
     case WaitReject:
-        after := time.After(timeout)
+        after := time.NewTimer(timeout)
+        defer after.Stop()
         select {
-        case <-after:
+        case <-after.C:
             return fmt.Errorf("wait %s then reject mission{%s}", timeout, mission.id)
         case p.enqueueMission <- mission:
         }
     case WaitEval:
-        after := time.After(timeout)
+        after := time.NewTimer(timeout)
+        defer after.Stop()
         select {
-        case <-after:
+        case <-after.C:
             err, _ = mission.Eval()
             return
         case p.enqueueMission <- mission:
@@ -167,15 +169,16 @@ func (p Pool) addWorkers(num int32) {
 
 func (p Pool) addWorker() {
     go func() {
-        for timeout := time.After(p.freeTime); ; timeout = time.After(p.freeTime) {
+        for timeout := time.NewTimer(p.freeTime); ; timeout.Reset(p.freeTime) {
             select {
             case mission := <-p.dequeueMission:
                 if err, duration := mission.Eval(); err == nil {
                     fmt.Println(duration)
                 }
-            case <-timeout:
+            case <-timeout.C:
                 p.UpdateWorkers(-1)
             case <-p.closeSig:
+                timeout.Stop()
                 return
             }
         }
