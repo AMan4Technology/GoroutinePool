@@ -56,10 +56,8 @@ func (p Pool) Empty() bool {
     return p.queue.Empty()
 }
 
-func (p Pool) UpdateWorkers(num int32) {
-    if (num > 0 && p.Full() && p.workers < p.max) || (num < 0 && !p.Full() && p.workers > p.min) {
-        p.workerSig <- num
-    }
+func (p *Pool) UpdateWorkers(num int32) {
+    p.workerSig <- num
 }
 
 func (p *Pool) Enqueue(mission Mission) error {
@@ -140,6 +138,9 @@ func (p *Pool) start() {
     go func() {
         for change := range p.workerSig {
             if change > 0 {
+                if !p.Full() {
+                    continue
+                }
                 if canChange := p.max - p.workers; canChange <= 0 {
                     continue
                 } else if change > canChange {
@@ -148,6 +149,9 @@ func (p *Pool) start() {
                 p.workers += change
                 p.addWorkers(change)
             } else if change < 0 {
+                if p.Full() {
+                    continue
+                }
                 change = -change
                 if canChange := p.workers - p.min; canChange <= 0 {
                     continue
@@ -161,13 +165,13 @@ func (p *Pool) start() {
     }()
 }
 
-func (p Pool) addWorkers(num int32) {
+func (p *Pool) addWorkers(num int32) {
     for i := 0; i < int(num); i++ {
         p.addWorker()
     }
 }
 
-func (p Pool) addWorker() {
+func (p *Pool) addWorker() {
     go func() {
         for timeout := time.NewTimer(p.freeTime); ; timeout.Reset(p.freeTime) {
             select {
@@ -185,12 +189,12 @@ func (p Pool) addWorker() {
     }()
 }
 
-func (p Pool) removeWorkers(num int32) {
+func (p *Pool) removeWorkers(num int32) {
     for i := 0; i < int(num); i++ {
         p.removeWorker()
     }
 }
 
-func (p Pool) removeWorker() {
+func (p *Pool) removeWorker() {
     p.closeSig <- struct{}{}
 }
